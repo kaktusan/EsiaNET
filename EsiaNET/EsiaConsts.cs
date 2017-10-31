@@ -15,6 +15,10 @@ namespace EsiaNET
         /// </summary>
         public const string EsiaAuthUrl = "https://esia.gosuslugi.ru/aas/oauth2/ac";
 
+        public const string EsiaTestLogoutUrl = "https://esia-portal1.test.gosuslugi.ru/idp/ext/Logout";
+
+        public const string EsiaLogoutUrl = "https://esia.gosuslugi.ru/idp/ext/Logout";
+
         /// <summary>
         /// ESIA access token url
         /// </summary>

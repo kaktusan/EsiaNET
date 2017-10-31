@@ -37,12 +37,15 @@ namespace EsiaNET
             OrgsSfx = EsiaConsts.EsiaOrgsSfx;
             KidsSfx = EsiaConsts.EsiaKidsSfx;
             VhlsSfx = EsiaConsts.EsiaVhlsSfx;
+            LogoutUri = EsiaConsts.EsiaLogoutUrl;
         }
 
         /// <summary>
         /// ESIA authentication url to redirect. Default: https://esia.gosuslugi.ru/aas/oauth2/ac
         /// </summary>
         public string RedirectUri { get; set; }
+
+        public string LogoutUri { get; set; }
 
         /// <summary>
         /// ESIA access token url. Default: https://esia.gosuslugi.ru/aas/oauth2/te

@@ -170,19 +170,30 @@ namespace EsiaNET
             return builder.ToString();
         }
 
+        public virtual string BuildLogoutRedirectUri(string callbackUri = null)
+        {
+            var builder = new StringBuilder();
+
+            // Redirect uri to ESIA
+            builder.Append(Options.LogoutUri);
+            builder.AppendFormat("?client_id={0}", Uri.EscapeDataString(Options.ClientId)); // Client system identifier
+
+            return builder.ToString();
+        }
+
         /// <summary>
         /// Returns response for access token by authorization code
         /// </summary>
         /// <param name="authCode">Authorization code</param>
         /// <param name="callbackUri">Callback uri for ESIA. Must be equal to BuildRedirectUri call parameter</param>
         /// <returns>Token response</returns>
-        public virtual async Task<EsiaTokenResponse> GetOAuthTokenAsync(string authCode, string callbackUri = null)
+        public virtual EsiaTokenResponse GetOAuthTokenAsync(string authCode, string callbackUri = null)
         {
             if ( String.IsNullOrEmpty(authCode) ) throw new ArgumentNullException("authCode");
 
             if ( String.IsNullOrEmpty(callbackUri) ) callbackUri = Options.CallbackUri;
 
-            return await InternalGetOAuthTokenAsync(authCode, callbackUri, TokenRequest.ByAuthCode);
+            return InternalGetOAuthTokenAsync(authCode, callbackUri, TokenRequest.ByAuthCode);
         }
 
         /// <summary>
@@ -191,13 +202,13 @@ namespace EsiaNET
         /// <param name="refreshToken">Refresh token</param>
         /// <param name="callbackUri">Callback uri for ESIA. Must be equal to BuildRedirectUri call parameter</param>
         /// <returns>Token response</returns>
-        public virtual async Task<EsiaTokenResponse> GetOAuthTokenByRefreshAsync(string refreshToken, string callbackUri = null)
+        public virtual EsiaTokenResponse GetOAuthTokenByRefreshAsync(string refreshToken, string callbackUri = null)
         {
             if ( String.IsNullOrEmpty(refreshToken) ) throw new ArgumentNullException("refreshToken");
 
             if ( String.IsNullOrEmpty(callbackUri) ) callbackUri = Options.CallbackUri;
 
-            return await InternalGetOAuthTokenAsync(refreshToken, callbackUri, TokenRequest.ByRefresh);
+            return InternalGetOAuthTokenAsync(refreshToken, callbackUri, TokenRequest.ByRefresh);
         }
 
         /// <summary>
@@ -205,11 +216,11 @@ namespace EsiaNET
         /// </summary>
         /// <param name="callbackUri">Callback uri for ESIA. Must be equal to BuildRedirectUri call parameter</param>
         /// <returns>Token response</returns>
-        public virtual async Task<EsiaTokenResponse> GetOAuthTokenByCredentialsAsync(string callbackUri = null)
+        public virtual EsiaTokenResponse GetOAuthTokenByCredentialsAsync(string callbackUri = null)
         {
             if ( String.IsNullOrEmpty(callbackUri) ) callbackUri = Options.CallbackUri;
 
-            return await InternalGetOAuthTokenAsync(String.Empty, callbackUri, TokenRequest.ByCredential);
+            return InternalGetOAuthTokenAsync(String.Empty, callbackUri, TokenRequest.ByCredential);
         }
 
         /// <summary>
@@ -219,7 +230,7 @@ namespace EsiaNET
         /// <param name="callbackUri">Callback uri for ESIA</param>
         /// <param name="request">Token request type</param>
         /// <returns>Token response</returns>
-        protected virtual async Task<EsiaTokenResponse> InternalGetOAuthTokenAsync(string code, string callbackUri, TokenRequest request)
+        protected virtual EsiaTokenResponse InternalGetOAuthTokenAsync(string code, string callbackUri, TokenRequest request)
         {   // Setup required params
             string timestamp = DateTime.UtcNow.ToString("yyyy.MM.dd HH:mm:ss +0000");
             string state = Options.State.ToString("D");
@@ -264,20 +275,20 @@ namespace EsiaNET
             // Build request content with params
             var requestContent = new FormUrlEncodedContent(requestParams);
 #if DEBUG
-            var content = await requestContent.ReadAsStringAsync();
+            var content = requestContent.ReadAsStringAsync();
 
             Debug.Write(content);
 #endif
             // Send POST request to ESIA token uri
-            HttpResponseMessage response = await HttpClient.PostAsync(Options.TokenUri, requestContent);
+            HttpResponseMessage response = HttpClient.PostAsync(Options.TokenUri, requestContent).Result;
 
             // Update last status
-            await UpdateLastStatusCode(response);
+            UpdateLastStatusCode(response);
             // and check response status. Must be OK
             response.EnsureSuccessStatusCode();
 
             // Get response content and parse JSON string content to object
-            string oauthTokenResponse = await response.Content.ReadAsStringAsync();
+            string oauthTokenResponse = response.Content.ReadAsStringAsync().Result;
             JObject oauth2Token = JObject.Parse(oauthTokenResponse);
             // Get access token
             string accessToken = oauth2Token["access_token"].Value<string>();
@@ -304,14 +315,14 @@ namespace EsiaNET
             };
         }
 
-        private async Task UpdateLastStatusCode(HttpResponseMessage response)
+        private void UpdateLastStatusCode(HttpResponseMessage response)
         {
             LastStatusCode = response.StatusCode;
             LastStatusMessage = null;
 
             if ( !response.IsSuccessStatusCode )
             {
-                LastStatusMessage = await response.Content.ReadAsStringAsync();
+                LastStatusMessage = response.Content.ReadAsStringAsync().Result;
             }
         }
 
@@ -356,7 +367,7 @@ namespace EsiaNET
         /// <param name="requestParams">Parameters</param>
         /// <param name="headers">Additional headers</param>
         /// <returns>Http response</returns>
-        public virtual async Task<HttpResponseMessage> SendAsync(HttpMethod method, string requestUri,
+        public virtual HttpResponseMessage SendAsync(HttpMethod method, string requestUri,
             SendStyles styles = SendStyles.Normal,
             IList<KeyValuePair<string, string>> requestParams = null, IList<KeyValuePair<string, string>> headers = null)
         {
@@ -374,20 +385,20 @@ namespace EsiaNET
             {
                 if ( styles.HasFlag(SendStyles.RefreshToken) && !String.IsNullOrEmpty(Token.RefreshToken) )
                 {
-                    await UpdateToken(styles);
+                    UpdateToken(styles);
                 }
             }
 
             // Make request
-            var response = await InternalSendAsync(method, requestUri, requestParams, headers);
+            var response = InternalSendAsync(method, requestUri, requestParams, headers);
 
             // If SendStyles.RefreshToken flag is set and response status is unauthorized - update token by refresh token
             // and repeat request
             if ( response.StatusCode == HttpStatusCode.Unauthorized && styles.HasFlag(SendStyles.RefreshToken) )
             {
-                await UpdateToken(styles);
+                UpdateToken(styles);
 
-                response = await InternalSendAsync(method, requestUri, requestParams, headers);
+                response = InternalSendAsync(method, requestUri, requestParams, headers);
             }
 
             return response;
@@ -404,13 +415,13 @@ namespace EsiaNET
         /// <param name="requestUri">Request uri</param>
         /// <param name="styles">Flags. See SendStyles enumeration</param>
         /// <returns>Response string</returns>
-        public virtual async Task<string> GetAsync(string requestUri, SendStyles styles = SendStyles.Normal)
+        public virtual string GetAsync(string requestUri, SendStyles styles = SendStyles.Normal)
         {
-            var response = await SendAsync(HttpMethod.Get, requestUri, styles);
+            var response = SendAsync(HttpMethod.Get, requestUri, styles);
 
             if ( !response.IsSuccessStatusCode ) return null;
 
-            return await response.Content.ReadAsStringAsync();
+            return response.Content.ReadAsStringAsync().Result;
         }
 
         /// <summary>
@@ -420,14 +431,14 @@ namespace EsiaNET
         /// <param name="styles">Flags. See SendStyles enumeration</param>
         /// <param name="requestParams">Parameters</param>
         /// <returns>Response string</returns>
-        public virtual async Task<string> PostAsync(string requestUri, SendStyles styles = SendStyles.Normal,
+        public virtual string PostAsync(string requestUri, SendStyles styles = SendStyles.Normal,
             IList<KeyValuePair<string, string>> requestParams = null)
         {
-            var response = await SendAsync(HttpMethod.Post, requestUri, styles, requestParams);
+            var response =  SendAsync(HttpMethod.Post, requestUri, styles, requestParams);
 
             if ( !response.IsSuccessStatusCode ) return null;
 
-            return await response.Content.ReadAsStringAsync();
+            return response.Content.ReadAsStringAsync().Result;
         }
 
         /// <summary>
@@ -437,14 +448,14 @@ namespace EsiaNET
         /// <param name="styles">Flags. See SendStyles enumeration</param>
         /// <param name="requestParams">Parameters</param>
         /// <returns>Response string</returns>
-        public virtual async Task<string> PutAsync(string requestUri, SendStyles styles = SendStyles.Normal,
+        public virtual string PutAsync(string requestUri, SendStyles styles = SendStyles.Normal,
             IList<KeyValuePair<string, string>> requestParams = null)
         {
-            var response = await SendAsync(HttpMethod.Put, requestUri, styles, requestParams);
+            var response = SendAsync(HttpMethod.Put, requestUri, styles, requestParams);
 
             if ( !response.IsSuccessStatusCode ) return null;
 
-            return await response.Content.ReadAsStringAsync();
+            return response.Content.ReadAsStringAsync().Result;
         }
 
         /// <summary>
@@ -452,9 +463,9 @@ namespace EsiaNET
         /// </summary>
         /// <param name="styles">Flags. See SendStyles enumeration</param>
         /// <returns></returns>
-        private async Task UpdateToken(SendStyles styles)
+        private void UpdateToken(SendStyles styles)
         {
-            var tokenResponse = await GetOAuthTokenByRefreshAsync(Token.RefreshToken);
+            var tokenResponse = GetOAuthTokenByRefreshAsync(Token.RefreshToken);
 
             if ( styles.HasFlag(SendStyles.VerifyToken) && !VerifyToken(tokenResponse.AccessToken) ) throw new Exception("Token signature is invalid");
 
@@ -469,7 +480,7 @@ namespace EsiaNET
         /// <param name="requestParams">Parameters</param>
         /// <param name="headers">Additional headers</param>
         /// <returns>Response</returns>
-        protected virtual async Task<HttpResponseMessage> InternalSendAsync(HttpMethod method, string requestUri,
+        protected virtual HttpResponseMessage InternalSendAsync(HttpMethod method, string requestUri,
             IList<KeyValuePair<string, string>> requestParams, IList<KeyValuePair<string, string>> headers)
         {
             var message = new HttpRequestMessage(method, requestUri);
@@ -490,20 +501,43 @@ namespace EsiaNET
 
             if ( requestParams != null ) message.Content = new FormUrlEncodedContent(requestParams);
 
-            var response = await HttpClient.SendAsync(message);
+            var response = HttpClient.SendAsync(message).Result;
 
-            await UpdateLastStatusCode(response);
+            UpdateLastStatusCode(response);
 
             return response;
         }
 
         private HttpClient CreateHttpClient()
         {
-            return new HttpClient
+            string proxyUri =
+                string.Format("{0}:{1}", "proxy6.krista.ru", "8080");
+
+            NetworkCredential proxyCreds = new NetworkCredential(
+                "tsvetkov",
+                ""
+            );
+
+            WebProxy proxy = new WebProxy(proxyUri, false)
+            {
+                UseDefaultCredentials = false,
+                Credentials = proxyCreds,
+            };
+
+            HttpClientHandler httpClientHandler = new HttpClientHandler()
+            {
+                Proxy = proxy,
+                PreAuthenticate = true,
+                UseDefaultCredentials = false,
+            };
+
+            var client =  new HttpClient()
             {
                 Timeout = Options.BackchannelTimeout,
                 MaxResponseContentBufferSize = 1024 * 1024 * 10 // 10 MB
             };
+
+            return client;
         }
 
         /// <summary>
